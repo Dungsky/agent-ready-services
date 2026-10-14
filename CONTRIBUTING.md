@@ -16,8 +16,8 @@ attribution and corrections.
 
 ## Choose a path
 
-1. **Request a listing** when the company is new to Sourcey, or when you know
-   the service but not the file format. Open a
+1. **Request a listing** when you know the service but not the file format.
+   Open a
    [listing request](https://github.com/sourcey/agent-ready-services/issues/new?template=request-assessment.yml)
    and Sourcey writes the listing.
 2. **Write the listing yourself** as YAML in a pull request. The example below
@@ -30,12 +30,11 @@ format.
 ## Before you edit
 
 1. Search the open issues and pull requests for the company and product.
-2. Open a [listing request](https://github.com/sourcey/agent-ready-services/issues/new?template=request-assessment.yml)
-   first if the company has no file here yet, so Sourcey can confirm its
-   identity.
-3. Sourcey confirms the company's stable `entity_id`. Startup Offers and Agent
-   Readiness share that identity but stay separate catalogs, so do not copy a
-   credit or deal into a listing.
+2. Use the company's `entity_id` from Sourcey when Sourcey lists it. Startup
+   Offers and Agent Readiness share that identity but stay separate catalogs,
+   so do not copy a credit or deal into a listing.
+3. If Sourcey does not list the company yet, see
+   [A company new to Sourcey](#a-company-new-to-sourcey).
 4. Use `authority_intent: entity` only when Sourcey has already confirmed that
    you control the company's own domain. Otherwise use `community`.
 
@@ -289,18 +288,17 @@ listing and those probes and labelled Probed, until a run verifies the job.
 - **Resources** are pages and documents a person or agent can read. A URL
   appears once and carries every role it serves.
 - **Endpoints** are network locations an agent calls. List an endpoint only
-  when a public source names it. A `registration` endpoint is where a person
-  or an agent signs up, declared only where signing up there gets an account
-  that can do the job: Sourcey requests it, and one that is there and answers
-  the GET with a success, an offer or a typed 405 (it signs up by POST) is a
-  sign-up API, a path for the agent to register itself; one that asks a person
-  for something (a CAPTCHA answering a typed error, a credential) is a sign-up
-  for people. An `access_request` endpoint is the vendor's own page where a
+  when a public source names it. A `registration` endpoint is the page where a
+  person signs up, declared only where signing up there gets an account that
+  can do the job; Sourcey requests it only to see that it is there. A sign-up
+  API an agent calls itself is an account operation instead (below). An
+  `access_request` endpoint is the vendor's own page where a
   person asks for access, through sales or approval. Once that page is there,
   access is the vendor's decision (Onboard `gated`): for the interface that
   lists it among its `endpoint_ids`, where the vendor approves who calls that
   interface whatever sign-up sits beside it; for every interface when no
-  interface lists it and no `registration` endpoint is declared. An
+  interface lists it and no `registration` endpoint or account operation is
+  declared. An
   `access_setting` endpoint is the page where a person on the account turns an
   interface on for agents once, where it starts off (an organization setting
   that allows an MCP server's write tools); the interface lists it among its
@@ -342,9 +340,15 @@ listing and those probes and labelled Probed, until a run verifies the job.
     headers every request needs (such as an API version header) and the
     body's media type exactly as the vendor documents it (such as
     `{ media_type: application/json }`,
-    `{ media_type: application/x-www-form-urlencoded }` or
-    `{ media_type: application/x-sentry-envelope }`) or `null`. No header or
-    query parameter may carry a credential. Put a
+    `{ media_type: application/x-www-form-urlencoded }`,
+    `{ media_type: application/x-sentry-envelope }`, or
+    `{ media_type: application/grpc }` for a gRPC call, a POST to the method's
+    path, such as `/modal.client.ModalClient/SandboxCreate`) or `null`. No
+    header or query parameter may carry a credential. Where the vendor takes
+    its key in the request body rather than a header, name the field that
+    carries it (`{ media_type: application/json, credential_field: api_key }`
+    for Amplitude's): OpenAPI has no security scheme for a key in the body, so
+    the vendor's document cannot say the request needs one. Put a
     well-formed placeholder where an account-specific identifier or host label
     goes. In `spec`, name the vendor's OpenAPI 3 document that covers the
     request, with the operations in it that create and revoke an API key when
@@ -364,6 +368,27 @@ listing and those probes and labelled Probed, until a run verifies the job.
   answer it keeps only the shape. The answer shows what authority, payment or
   account the job needs. A spec operation sends nothing: its steps are read
   from the document.
+- **`account_operations`** are what an agent does on its own account beside
+  the job, declared only where the vendor documents them for agents. Leave
+  the section out when there is none. Each names its `operation_id`, the
+  `interface_id` whose job it serves, a `role`, where the agent calls it (an
+  `endpoint_id` the interface lists, and the `method` and `url` on that
+  endpoint's origin) and the vendor's OpenAPI 3 document that holds it under
+  one of its servers (`spec_url`), each field bound to the vendor's source:
+  - `role: registration`: a sign-up API that issues the agent its own
+    credential (Telnyx's `POST /v2/bot_signup`). Where the document covers it
+    and requires no credential for it (an empty requirement, or none in a
+    document that requires one on its other operations), the agent registers
+    itself (Authority and Onboard `machine`). A document that states no
+    security anywhere says nothing about it.
+  - `role: top_up`: an operation the agent funds the balance the job draws on
+    with, paid by the agent itself. Where the document covers it and declares
+    a machine payment (`x-payment-info`, or a 402 response with a
+    `WWW-Authenticate` challenge, MPP's), Pay is `machine`.
+
+  Sourcey sends nothing to an account operation: it never signs up or pays.
+  It reads the operation in the document, following the references the
+  reading needs to documents on the same host.
 - **Interfaces** are what an agent uses. Each one points at its resources or
   endpoints. `modality` says how it is used (`web_application`,
   `network_api`, `command_line`, `software_library`, `tool_server` or
@@ -395,6 +420,38 @@ listing and those probes and labelled Probed, until a run verifies the job.
 
 Never add a field for a result, such as "ready", a step outcome, a letter or a
 fix. Sourcey's policy derives those from the listing and its probes.
+
+## A company new to Sourcey
+
+A listing can name a company Sourcey does not list yet. Give the company a
+fresh `entity_id` and add a `company` block after `entity`:
+
+```yaml
+company:
+  summary: Acme runs managed databases for small teams.
+  site_url: https://acme.example
+```
+
+- `summary` is one or two plain sentences about what the company does, at
+  most 240 characters.
+- `site_url` is the company's own website, with no tracking parameters.
+
+Generate the `entity_id` with Node:
+
+```bash
+node -e 'const{randomBytes}=require("node:crypto"),a="0123456789abcdefghjkmnpqrstvwxyz",e=(n,l)=>{let s="";while(l--)s=a[Number(n&31n)]+s,n>>=5n;return s};console.log("ent_"+e(BigInt(Date.now()),10)+e(BigInt("0x"+randomBytes(10).toString("hex")),16))'
+```
+
+Sourcey lists the company first, the same way it lists any new company. A
+company that meets the automatic listing rule is listed for free. One that
+does not is offered a US$29 verification by a person, which your pull
+request's check links to. While the company is being listed, the check says
+so. It runs again by itself once the company is live, and you do not need to
+change your pull request.
+
+A pull request can add one new company. Its listings use
+`authority_intent: community` and `offer_relations: []`, since Sourcey has not
+confirmed who controls the company or any Offer it makes.
 
 ## Optional: add a job binding
 
